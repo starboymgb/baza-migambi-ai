@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="rw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Igisoro Live & Betting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        .pit-shadow {
+            box-shadow: inset 0 4px 6px -1px rgba(0, 0, 0, 0.6), inset 0 2px 4px -1px rgba(0, 0, 0, 0.5);
+        }
+        /* Style yo kugaragaza umwobo uri gucurwamo imbege ubu */
+        .active-sowing {
+            background-color: #78350f !important; /* Amber-900 */
+            box-shadow: 0 0 12px #f59e0b;
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-start pt-24 pb-12 font-sans relative p-4">
+
+    <!-- TOP BAR (Balance) -->
+    <div class="absolute top-4 right-4 flex items-center gap-4 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 z-10">
+        <div class="text-right">
+            <span class="text-xs text-slate-400 block">Wallet Balance</span>
+            <span class="text-lg font-extrabold text-emerald-400" id="wallet-balance">0 RWF</span>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="togglePopup('deposit-popup')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold transition-colors">Deposit</button>
+            <button onclick="togglePopup('withdraw-popup')" class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-xs font-bold transition-colors">Withdraw</button>
+        </div>
+    </div>
+
+    <!-- MAIN CARD -->
+    <div id="main-menu" class="text-center space-y-6 max-w-lg p-6 bg-slate-800 rounded-xl shadow-2xl border border-slate-700">
+        <h1 class="text-4xl font-extrabold text-amber-500 tracking-wider">IGISORO LIVE</h1>
+        <p class="text-slate-400">Karibu! Kina n'inshuti zawe Live cyangwa na Computer ubashe gutsindira amafaranga macye.</p>
+        
+        <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 rounded-full text-xs">
+            <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+            <span id="status-text">Guhuza na server...</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 pt-4">
+            <button onclick="fataUrurimi('computer')" class="py-3 px-6 bg-amber-600 hover:bg-amber-500 rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg">
+                🎮 Vs Computer
+            </button>
+            <button onclick="startOnlineQueue()" class="py-3 px-6 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg">
+                👥 Kina Online (Live)
+            </button>
+        </div>
+    </div>
+
+    <!-- ⏳ QUEUE WAITING SCREEN -->
+    <div id="waiting-screen" class="hidden text-center space-y-4 max-w-sm p-8 bg-slate-800 rounded-xl border border-slate-700 shadow-2xl">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent mx-auto"></div>
+        <h3 class="text-xl font-bold">Gushaka umukino...</h3>
+        <p class="text-sm text-slate-400">Turi gushaka undi mukinnyi uri online ngo muhure. Lindira gato!</p>
+    </div>
+
+    <!-- 🎮 GAMEPLAY AREA (IGISORO BOARD) -->
+    <div id="game-area" class="hidden w-full max-w-3xl px-4 py-6 bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl flex flex-col items-center gap-6 mt-4">
+        <div class="w-full flex justify-between items-center px-4">
+            <div>
+                <span class="text-xs text-slate-400 block">Uwo muhanganye:</span>
+                <span class="text-md sm:text-lg font-bold text-amber-400" id="opponent-name">Undi muntu</span>
+            </div>
+            <div class="bg-slate-950 px-4 py-1.5 rounded-full text-xs border border-slate-800">
+                Intego: <span class="text-emerald-400 font-bold">200 RWF</span>
+            </div>
+            <div class="text-right">
+                <span class="text-xs text-slate-400 block">Igihe:</span>
+                <span class="text-md font-extrabold text-amber-500" id="turn-status">Gushaka zamu...</span>
+            </div>
+        </div>
+
+        <!-- BOARD GAKONDO (Imirongo 4 × Utwobo 8) -->
+        <div class="p-4 sm:p-6 rounded-2xl border-4 transition-all duration-300 w-full flex flex-col gap-4" id="board-container">
+            
+            <!-- PLAYER 1 ZONE (Hejuru - Imirongo 0 na 1) -->
+            <div class="space-y-4 transition-all duration-300 p-2 rounded-xl" id="p1-side">
+                <!-- Umurongo wa 0 -->
+                <div class="grid grid-cols-8 gap-1.5 sm:gap-3" id="row-0"></div>
+                <!-- Umurongo wa 1 -->
+                <div class="grid grid-cols-8 gap-1.5 sm:gap-3" id="row-1"></div>
+            </div>
+
+            <!-- AKABYIZI KO HAGATI -->
+            <div class="border-t-2 border-amber-800/50 my-1"></div>
+
+            <!-- PLAYER 2 ZONE (Hasi - Imirongo 2 na 3) -->
+            <div class="space-y-4 transition-all duration-300 p-2 rounded-xl" id="p2-side">
+                <!-- Umurongo wa 2 -->
+                <div class="grid grid-cols-8 gap-1.5 sm:gap-3" id="row-2"></div>
+                <!-- Umurongo wa 3 -->
+                <div class="grid grid-cols-8 gap-1.5 sm:gap-3" id="row-3"></div>
+            </div>
+
+        </div>
+
+        <p class="text-xs text-slate-400 text-center">Kanda ku mwobo w'urushandiko rwawe ufite imbege ngo utangire gukina zamu yawe.</p>
+    </div>
+
+    <!-- POPUP ZONE (Deposit/Withdraw are the same) -->
+    <!-- ... popup elements continue to remain the same ... -->
+    <div id="deposit-popup" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm relative">
+            <button onclick="togglePopup('deposit-popup')" class="absolute top-3 right-3 text-slate-400 hover:text-white text-xl">&times;</button>
+            <h3 class="text-xl font-bold text-emerald-400 mb-4">Gushyiraho Amafaranga (Deposit)</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nimero ya Mobile Money (MTN/Airtel)</label>
+                    <input type="text" id="dep-phone" placeholder="0788xxxxxx" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Umubare w'Amafaranga (RWF)</label>
+                    <input type="number" id="dep-amount" placeholder="Ugerero: 1000" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <button onclick="submitDeposit()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 rounded font-bold transition-colors">
+                    Emeza (Deposit)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="withdraw-popup" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm relative">
+            <button onclick="togglePopup('withdraw-popup')" class="absolute top-3 right-3 text-slate-400 hover:text-white text-xl">&times;</button>
+            <h3 class="text-xl font-bold text-red-400 mb-4">Kubikuza Amafaranga (Withdraw)</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nimero yo Kubikuzaho MoMo</label>
+                    <input type="text" id="with-phone" placeholder="0788xxxxxx" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Umubare w'Amafaranga (RWF)</label>
+                    <input type="number" id="with-amount" placeholder="Ugerero: 500" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500">
+                </div>
+                <button onclick="submitWithdraw()" class="w-full py-2 bg-red-600 hover:bg-red-500 rounded font-bold transition-colors">
+                    Emeza (Withdraw)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        
+        let currentUser = null; 
+        let myRole = ''; 
+        let currentRoom = '';
+        let myTurn = false;
+        let currentBoardState = []; // Kubika board state ngo tujye tureba updates
+
+        async function initializeUser() {
+            const storedUserId = localStorage.getItem('igisoro_user_id');
+            try {
+                const response = await fetch('/api/user/get-or-create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: storedUserId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    currentUser = data.user;
+                    localStorage.setItem('igisoro_user_id', currentUser.id);
+                    document.getElementById('wallet-balance').textContent = `${Number(currentUser.wallet_balance).toLocaleString()} RWF`;
+                }
+            } catch (err) {
+                console.error("Byanze gushaka umukinnyi:", err);
+            }
+        }
+
+        socket.on('connect', () => {
+            statusDot.classList.replace('bg-red-500', 'bg-emerald-500');
+            statusText.textContent = "Uruzinduko rurinzwe kandi ruri online";
+            initializeUser(); 
+        });
+
+        socket.on('disconnect', () => {
+            statusDot.classList.replace('bg-emerald-500', 'bg-red-500');
+            statusText.textContent = "Ntabwo uri online";
+        });
+
+        function startOnlineQueue() {
+            if(!currentUser) return alert('Banza utegereze ko umwirondoro wawe uza!');
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('waiting-screen').classList.remove('hidden');
+            socket.emit('join_queue', currentUser);
+        }
+
+        socket.on('match_found', (gameData) => {
+            document.getElementById('waiting-screen').classList.add('hidden');
+            document.getElementById('game-area').classList.remove('hidden');
+
+            currentRoom = gameData.roomId;
+            myRole = gameData.role;
+            myTurn = gameData.yourTurn;
+
+            document.getElementById('opponent-name').textContent = gameData.opponent;
+            updateTurnVisuals();
+            
+            currentBoardState = JSON.parse(JSON.stringify(gameData.board));
+            renderBoard(currentBoardState);
+        });
+
+        // Kugaragaza neza ufite zamu (A)
+        function updateTurnVisuals() {
+            const turnStatus = document.getElementById('turn-status');
+            const boardContainer = document.getElementById('board-container');
+            const p1Side = document.getElementById('p1-side');
+            const p2Side = document.getElementById('p2-side');
+
+            if (myTurn) {
+                turnStatus.textContent = "Ni wowe!";
+                turnStatus.className = "text-md font-extrabold text-emerald-400 animate-pulse";
+                boardContainer.className = "bg-amber-950 p-4 sm:p-6 rounded-2xl border-4 border-emerald-500/80 w-full flex flex-col gap-4 transition-all duration-300";
+            } else {
+                turnStatus.textContent = "Tegereza...";
+                turnStatus.className = "text-md font-extrabold text-amber-500";
+                boardContainer.className = "bg-amber-950 p-4 sm:p-6 rounded-2xl border-4 border-amber-900 w-full flex flex-col gap-4 transition-all duration-300";
+            }
+
+            // Gushyiraho background na opacity hashingiye kuri Role ye niba ari zamu ye
+            if (myRole === 'player1') {
+                if (myTurn) {
+                    p1Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl bg-slate-900/40 border border-emerald-500/30";
+                    p2Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl opacity-40 pointer-events-none";
+                } else {
+                    p1Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl opacity-40 pointer-events-none";
+                    p2Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl bg-slate-900/10";
+                }
+            } else if (myRole === 'player2') {
+                if (myTurn) {
+                    p2Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl bg-slate-900/40 border border-emerald-500/30";
+                    p1Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl opacity-40 pointer-events-none";
+                } else {
+                    p2Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl opacity-40 pointer-events-none";
+                    p1Side.className = "space-y-4 transition-all duration-300 p-2 rounded-xl bg-slate-900/10";
+                }
+            }
+        }
+
+        // Kwerekana utwobo n'utubuye duto twipanze tubiri tubiri
+        function renderBoard(board) {
+            for (let r = 0; r < 4; r++) {
+                const rowDiv = document.getElementById(`row-${r}`);
+                rowDiv.innerHTML = ''; 
+
+                for (let c = 0; c < 8; c++) {
+                    const seeds = board[r][c];
+                    const pit = document.createElement('button');
+                    pit.id = `pit-${r}-${c}`;
+                    pit.className = `w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full bg-amber-950/80 border border-amber-800 pit-shadow flex items-center justify-center relative transition-all duration-200 transform hover:scale-105 overflow-hidden`;
+                    
+                    let stonesHTML = '';
+                    if (seeds > 0) {
+                        stonesHTML = `<div class="absolute inset-0 p-1 grid grid-cols-2 gap-x-1 gap-y-0.5 place-content-center justify-items-center pointer-events-none opacity-85">`;
+                        const visualStones = Math.min(seeds, 12); 
+                        for (let i = 0; i < visualStones; i++) {
+                            stonesHTML += `<span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-amber-100 border border-amber-400/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)]"></span>`;
+                        }
+                        stonesHTML += `</div>`;
+                    }
+
+                    pit.innerHTML = `
+                        ${stonesHTML}
+                        <span class="relative z-10 font-extrabold text-xs sm:text-sm md:text-base text-white drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">${seeds > 0 ? seeds : ''}</span>
+                    `;
+
+                    pit.onclick = () => handlePitClick(r, c);
+                    rowDiv.appendChild(pit);
+                }
+            }
+        }
+
+        // 🚀 ANIMATION PROCESS Y'UKUNTU UTUBUYE TUBYUKA KANDI TUGASANDARA (Sowing Movement Steps)
+        function animateSowingProcess(steps, finalBoardState, finalTurn) {
+            let index = 0;
+
+            function nextStep() {
+                if (index >= steps.length) {
+                    // Nyuma yo kurangiza animation, twebura board nyamukuru neza
+                    currentBoardState = finalBoardState;
+                    myTurn = finalTurn;
+                    renderBoard(currentBoardState);
+                    updateTurnVisuals();
+                    return;
+                }
+
+                const currentStepBoard = steps[index].board;
+                const activePit = steps[index].active; // Umwobo uri gusukwamo urushandiko ubu
+
+                renderBoard(currentStepBoard);
+
+                // Gushyiraho urumuri ku mwobo uri gusukwamo akabuye
+                if (activePit) {
+                    const activeCell = document.getElementById(`pit-${activePit.r}-${activePit.c}`);
+                    if (activeCell) activeCell.classList.add('active-sowing');
+                }
+
+                index++;
+                setTimeout(nextStep, 180); // Umuvuduko w'isandara ry'utubuye (180 milliseconds)
+            }
+
+            nextStep();
+        }
+
+        socket.on('update_board', (gameData) => {
+            // Niba server yoheje amakuru arimo "steps" z'urukerera, dukore animation
+            if (gameData.steps && gameData.steps.length > 0) {
+                const nextTurn = (gameData.turn === socket.id);
+                animateSowingProcess(gameData.steps, gameData.board, nextTurn);
+            } else {
+                // Byayobye cyangwa byabaye ibya kera, guhita render bisanzwe
+                myTurn = (gameData.turn === socket.id);
+                currentBoardState = gameData.board;
+                renderBoard(currentBoardState);
+                updateTurnVisuals();
+            }
+        });
+
+        function handlePitClick(row, col) {
+            if (!myTurn) return;
+            if (myRole === 'player1' && row > 1) return;
+            if (myRole === 'player2' && row < 2) return;
+            if (currentBoardState[row][col] <= 1) return alert("Ntushobora kwarura umwobo urimo ubusa cyangwa akabuye kamwe!");
+
+            socket.emit('make_move', {
+                roomId: currentRoom,
+                row: row,
+                col: col
+            });
+        }
+
+        socket.on('game_over', (result) => {
+            alert(`🏁 Umukino Urangiye!\nUtsinze ni: ${result.winnerUsername}`);
+            document.getElementById('game-area').classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+            
+            if (result.winnerId === currentUser.id) {
+                currentUser.wallet_balance = Number(currentUser.wallet_balance) + 200;
+            } else {
+                currentUser.wallet_balance = Number(currentUser.wallet_balance) - 200;
+            }
+            document.getElementById('wallet-balance').textContent = `${Number(currentUser.wallet_balance).toLocaleString()} RWF`;
+        });
+
+        function togglePopup(popupId) {
+            const popup = document.getElementById(popupId);
+            popup.classList.toggle('hidden');
+        }
+
+        async function submitDeposit() {
+            const phone = document.getElementById('dep-phone').value;
+            const amount = document.getElementById('dep-amount').value;
+            if(!phone || !amount) return alert('Uzuza imyanya yose!');
+            try {
+                const response = await fetch('/api/wallet/deposit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.id, phone: phone, amount: Number(amount) })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(`🎉 ${data.message}`);
+                    document.getElementById('wallet-balance').textContent = `${Number(data.balance).toLocaleString()} RWF`;
+                    togglePopup('deposit-popup');
+                }
+            } catch (err) { alert("Byanze!"); }
+        }
+
+        async function submitWithdraw() {
+            const phone = document.getElementById('with-phone').value;
+            const amount = document.getElementById('with-amount').value;
+            if(!phone || !amount) return alert('Uzuza imyanya yose!');
+            try {
+                const response = await fetch('/api/wallet/withdraw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.id, phone: phone, amount: Number(amount) })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(`💸 ${data.message}`);
+                    document.getElementById('wallet-balance').textContent = `${Number(data.balance).toLocaleString()} RWF`;
+                    togglePopup('withdraw-popup');
+                }
+            } catch (err) { alert("Byanze!"); }
+        }
+
+        function fataUrurimi(modo) {
+            alert(`Wahasemo gukina muri modo ya: ${modo.toUpperCase()}`);
+        }
+    </script>
+</body>
+</html>

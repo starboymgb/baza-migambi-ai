@@ -4,7 +4,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg'); 
-const { createInitialBoard, hasValidMoves, playMove } = require('./gameLogic');
+// Inyuguti zose ni ntoya hano kugira ngo Render itakwanga
+const { createInitialBoard, hasValidMoves, playMove } = require('./gamelogic');
 
 const app = express();
 const server = http.createServer(app);

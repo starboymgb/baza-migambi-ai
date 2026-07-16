@@ -3,8 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const { Pool } = require('pg'); 
-// Inyuguti zose ni ntoya hano kugira ngo Render itakwanga
+const { Pool } = require('pg');
 const { createInitialBoard, hasValidMoves, playMove } = require('./gamelogic');
 
 const app = express();
@@ -17,7 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Database Setup
 const useDB = !!process.env.DATABASE_URL;
 let pool = null;
-let localUsersDB = {}; 
+let localUsersDB = {};
 
 if (useDB) {
     pool = new Pool({
@@ -25,52 +24,27 @@ if (useDB) {
         ssl: { rejectUnauthorized: false }
     });
     console.log("🔌 PostgreSQL Mode Active");
-} else {
-    console.log("⚠️ Local Memory Mode Active (Fallback)");
 }
 
-// Database Initialization
-const initDb = async () => {
-    if (!useDB) return;
-    const queryText = `
-        CREATE TABLE IF NOT EXISTS users (
-            id VARCHAR(50) PRIMARY KEY,
-            username VARCHAR(100) NOT NULL,
-            wallet_balance INT DEFAULT 1000
-        );
-    `;
-    try {
-        await pool.query(queryText);
-    } catch (err) {
-        console.error("DB Init Error:", err);
-    }
-};
-initDb();
-
 // Game State
-let activeRooms = {}; 
+let activeRooms = {};
 let onlineQueue = [];
 
-// API Endpoints
-app.post('/api/user/get-or-create', async (req, res) => {
-    let { userId } = req.body;
-    if (!useDB) {
-        if (!userId || !localUsersDB[userId]) {
-            const newId = userId || 'user_' + Math.random().toString(36).substring(2, 9);
-            localUsersDB[newId] = { id: newId, username: `Mukinnyi_${Math.random().toString(36).substring(2, 5).toUpperCase()}`, wallet_balance: 1000 };
-            userId = newId;
-        }
-        return res.json({ success: true, user: localUsersDB[userId] });
-    }
+// API: Deposit Money (Gukemura 404 Error)
+app.post('/api/wallet/deposit', async (req, res) => {
+    const { userId, amount } = req.body;
     try {
-        if (userId) {
-            const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-            if (userResult.rows.length > 0) return res.json({ success: true, user: userResult.rows[0] });
+        if (useDB) {
+            await pool.query('UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2', [amount, userId]);
+            res.json({ success: true, message: "Amafaranga yongewemo" });
+        } else {
+            if (localUsersDB[userId]) {
+                localUsersDB[userId].wallet_balance += amount;
+                res.json({ success: true, message: "Amafaranga yongewemo" });
+            } else {
+                res.status(404).json({ success: false, message: "User ntiboneka" });
+            }
         }
-        const newId = userId || 'user_' + Math.random().toString(36).substring(2, 9);
-        const username = `Mukinnyi_${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
-        const insertResult = await pool.query('INSERT INTO users (id, username, wallet_balance) VALUES ($1, $2, 1000) RETURNING *', [newId, username]);
-        res.json({ success: true, user: insertResult.rows[0] });
     } catch (err) {
         res.status(500).json({ success: false, error: "Database error" });
     }
@@ -78,6 +52,7 @@ app.post('/api/user/get-or-create', async (req, res) => {
 
 // Socket.IO
 io.on('connection', (socket) => {
+    
     socket.on('join_queue', async (userData) => {
         let user;
         if (!useDB) {
@@ -99,10 +74,20 @@ io.on('connection', (socket) => {
             const p1 = onlineQueue.shift();
             const p2 = onlineQueue.shift();
             const roomId = `room_${p1.userId}_${p2.userId}`;
+            
             activeRooms[roomId] = { board: createInitialBoard(), p1, p2, turn: p1.socketId };
-            io.to(p1.socketId).socketsJoin(roomId);
-            io.to(p2.socketId).socketsJoin(roomId);
-            io.to(roomId).emit('match_found', { roomId, board: activeRooms[roomId].board, turn: p1.socketId });
+            
+            io.sockets.sockets.get(p1.socketId)?.join(roomId);
+            io.sockets.sockets.get(p2.socketId)?.join(roomId);
+
+            io.to(p1.socketId).emit('match_found', { 
+                roomId, board: activeRooms[roomId].board, turn: p1.socketId, 
+                role: 'player1', opponent: p2.username, yourTurn: true 
+            });
+            io.to(p2.socketId).emit('match_found', { 
+                roomId, board: activeRooms[roomId].board, turn: p1.socketId, 
+                role: 'player2', opponent: p1.username, yourTurn: false 
+            });
         }
     });
 
@@ -117,16 +102,14 @@ io.on('connection', (socket) => {
         if (result.valid) {
             game.board = result.board;
             game.turn = (game.turn === game.p1.socketId) ? game.p2.socketId : game.p1.socketId;
+            
             io.to(roomId).emit('update_board', { board: game.board, turn: game.turn, steps: result.steps });
 
             if (!hasValidMoves(game.board, (game.turn === game.p1.socketId ? 'player1' : 'player2'))) {
                 const winner = (game.turn === game.p1.socketId) ? game.p2 : game.p1;
                 const loser = (game.turn === game.p1.socketId) ? game.p1 : game.p2;
 
-                if (!useDB) {
-                    localUsersDB[winner.userId].wallet_balance += 200;
-                    localUsersDB[loser.userId].wallet_balance -= 200;
-                } else {
+                if (useDB) {
                     await pool.query('UPDATE users SET wallet_balance = wallet_balance + 200 WHERE id = $1', [winner.userId]);
                     await pool.query('UPDATE users SET wallet_balance = wallet_balance - 200 WHERE id = $1', [loser.userId]);
                 }

@@ -8,7 +8,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         .pit-shadow { box-shadow: inset 0 4px 6px -1px rgba(0, 0, 0, 0.6), inset 0 2px 4px -1px rgba(0, 0, 0, 0.5); }
-        .active-sowing { background-color: #78350f !important; box-shadow: 0 0 12px #f59e0b; transform: scale(1.1); }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-start pt-24 pb-12 font-sans relative p-4">
@@ -17,50 +16,30 @@
     <div class="absolute top-4 right-4 flex items-center gap-4 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 z-10">
         <div class="text-right">
             <span class="text-xs text-slate-400 block">Wallet Balance</span>
-            <span class="text-lg font-extrabold text-emerald-400" id="wallet-balance">0 RWF</span>
+            <span class="text-lg font-extrabold text-emerald-400" id="wallet-balance">Loading...</span>
         </div>
         <div class="flex gap-2">
-            <button onclick="togglePopup('deposit-popup')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold transition-colors">Deposit</button>
-            <button onclick="togglePopup('withdraw-popup')" class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-xs font-bold transition-colors">Withdraw</button>
+            <button onclick="togglePopup('deposit-popup')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold">Deposit</button>
         </div>
     </div>
 
-    <!-- MAIN CARD -->
-    <div id="main-menu" class="text-center space-y-6 max-w-lg p-6 bg-slate-800 rounded-xl shadow-2xl border border-slate-700">
-        <h1 class="text-4xl font-extrabold text-amber-500 tracking-wider">IGISORO LIVE</h1>
-        <p class="text-slate-400">Karibu! Kina n'inshuti zawe Live cyangwa na Computer ubashe gutsindira amafaranga macye.</p>
+    <!-- MAIN MENU -->
+    <div id="main-menu" class="text-center space-y-6 max-w-lg p-6 bg-slate-800 rounded-xl border border-slate-700">
+        <h1 class="text-4xl font-extrabold text-amber-500">IGISORO LIVE</h1>
         <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 rounded-full text-xs">
             <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
             <span id="status-text">Guhuza na server...</span>
-        </div>
-        <div class="grid grid-cols-2 gap-4 pt-4">
-            <button onclick="alert('Iyi modo iracyategurwa!')" class="py-3 px-6 bg-amber-600 hover:bg-amber-500 rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg">🎮 Vs Computer</button>
-            <button onclick="startOnlineQueue()" class="py-3 px-6 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg">👥 Kina Online (Live)</button>
         </div>
     </div>
 
     <!-- POPUPS -->
     <div id="deposit-popup" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
-        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm relative">
-            <button onclick="togglePopup('deposit-popup')" class="absolute top-3 right-3 text-slate-400 hover:text-white text-xl">&times;</button>
+        <div class="bg-slate-800 rounded-xl p-6 w-full max-w-sm relative">
+            <button onclick="togglePopup('deposit-popup')" class="absolute top-3 right-3 text-xl">&times;</button>
             <h3 class="text-xl font-bold text-emerald-400 mb-4">Deposit</h3>
-            <div class="space-y-4">
-                <input type="text" id="dep-phone" placeholder="Nimero ya MoMo (0788xxxxxx)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
-                <input type="number" id="dep-amount" placeholder="Umubare (RWF)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
-                <button onclick="submitDeposit()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 rounded font-bold">Emeza</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="withdraw-popup" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
-        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-sm relative">
-            <button onclick="togglePopup('withdraw-popup')" class="absolute top-3 right-3 text-slate-400 hover:text-white text-xl">&times;</button>
-            <h3 class="text-xl font-bold text-red-400 mb-4">Withdraw</h3>
-            <div class="space-y-4">
-                <input type="text" id="with-phone" placeholder="Nimero ya MoMo" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
-                <input type="number" id="with-amount" placeholder="Umubare (RWF)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
-                <button onclick="submitWithdraw()" class="w-full py-2 bg-red-600 hover:bg-red-500 rounded font-bold">Emeza</button>
-            </div>
+            <input type="text" id="dep-phone" placeholder="0788xxxxxx" class="w-full bg-slate-900 border border-slate-700 p-2 mb-2">
+            <input type="number" id="dep-amount" placeholder="Amount (RWF)" class="w-full bg-slate-900 border border-slate-700 p-2 mb-4">
+            <button onclick="submitDeposit()" class="w-full py-2 bg-emerald-600 rounded font-bold">Emeza</button>
         </div>
     </div>
 
@@ -71,16 +50,18 @@
 
         socket.on('connect', () => {
             document.getElementById('status-dot').classList.replace('bg-red-500', 'bg-emerald-500');
-            document.getElementById('status-text').textContent = "Uhuje na server!";
+            document.getElementById('status-text').textContent = "Uhuje!";
             initializeUser();
         });
 
         async function initializeUser() {
             try {
+                // Tugeza amasegonda make niba ID idahise iboneka
+                const savedId = localStorage.getItem('igisoro_user_id') || null;
                 const response = await fetch(`${BACKEND_URL}/api/user/get-or-create`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: localStorage.getItem('igisoro_user_id') })
+                    body: JSON.stringify({ userId: savedId })
                 });
                 const data = await response.json();
                 if (data.success) {
@@ -88,13 +69,20 @@
                     localStorage.setItem('igisoro_user_id', currentUser.id);
                     document.getElementById('wallet-balance').textContent = `${Number(currentUser.wallet_balance).toLocaleString()} RWF`;
                 }
-            } catch (err) { console.error("Init Error:", err); }
+            } catch (err) { 
+                console.error("Init Error:", err);
+                setTimeout(initializeUser, 3000); // Ongera ugerageze nyuma y'amasegonda 3
+            }
         }
 
         async function submitDeposit() {
+            if (!currentUser) {
+                alert("Umwirondoro ukiri gupakira, tegereza gato!");
+                return;
+            }
             const phone = document.getElementById('dep-phone').value;
             const amount = document.getElementById('dep-amount').value;
-            if(!currentUser) return alert('Banza utegereze ko umwirondoro wiyandikisha!');
+            
             try {
                 const response = await fetch(`${BACKEND_URL}/api/wallet/deposit`, {
                     method: 'POST',
@@ -103,10 +91,11 @@
                 });
                 const data = await response.json();
                 if (data.success) {
-                    alert(`🎉 ${data.message}`);
-                    document.getElementById('wallet-balance').textContent = `${Number(data.balance).toLocaleString()} RWF`;
-                    togglePopup('deposit-popup');
-                } else { alert("Byanze: " + data.message); }
+                    alert("Byakunze!");
+                    location.reload();
+                } else {
+                    alert("Byanze: " + data.message);
+                }
             } catch (err) { alert("Server ntiri gusubiza!"); }
         }
 

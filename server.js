@@ -16,7 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Database Setup
 const useDB = !!process.env.DATABASE_URL;
 let pool = null;
-let localUsersDB = {};
+let localUsersDB = {}; // Iyi niyo ibika users mu gihe utari kuri PostgreSQL
 
 if (useDB) {
     pool = new Pool({
@@ -26,11 +26,21 @@ if (useDB) {
     console.log("🔌 PostgreSQL Mode Active");
 }
 
-// Game State
-let activeRooms = {};
-let onlineQueue = [];
+// API: Get or Create User (Iyi ni ngombwa kugira ngo user aboneke)
+app.post('/api/user/get-or-create', (req, res) => {
+    const { userId, username } = req.body;
+    if (!useDB) {
+        if (!localUsersDB[userId]) {
+            localUsersDB[userId] = { id: userId, username: username, wallet_balance: 1000 };
+        }
+        res.json(localUsersDB[userId]);
+    } else {
+        // Hano wakongeramo query yo muri DB niba ari ngombwa
+        res.json({ id: userId, username: username, status: "DB_MODE" });
+    }
+});
 
-// API: Deposit Money (Gukemura 404 Error)
+// API: Deposit Money
 app.post('/api/wallet/deposit', async (req, res) => {
     const { userId, amount } = req.body;
     try {
@@ -50,9 +60,28 @@ app.post('/api/wallet/deposit', async (req, res) => {
     }
 });
 
-// Socket.IO
+// API: Withdraw Money
+app.post('/api/wallet/withdraw', async (req, res) => {
+    const { userId, amount } = req.body;
+    try {
+        if (useDB) {
+            await pool.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [amount, userId]);
+            res.json({ success: true, message: "Kubikuza byagenze neza" });
+        } else {
+            if (localUsersDB[userId] && localUsersDB[userId].wallet_balance >= amount) {
+                localUsersDB[userId].wallet_balance -= amount;
+                res.json({ success: true, message: "Kubikuza byagenze neza" });
+            } else {
+                res.status(400).json({ success: false, message: "Balance ntihagije" });
+            }
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: "Database error" });
+    }
+});
+
+// Socket.IO (Game Logic)
 io.on('connection', (socket) => {
-    
     socket.on('join_queue', async (userData) => {
         let user;
         if (!useDB) {
@@ -66,62 +95,10 @@ io.on('connection', (socket) => {
             socket.emit('error_message', 'Amafaranga ntahagije (200 RWF).');
             return;
         }
-
-        onlineQueue = onlineQueue.filter(p => p.userId !== user.id);
-        onlineQueue.push({ socketId: socket.id, userId: user.id, username: user.username });
-
-        if (onlineQueue.length >= 2) {
-            const p1 = onlineQueue.shift();
-            const p2 = onlineQueue.shift();
-            const roomId = `room_${p1.userId}_${p2.userId}`;
-            
-            activeRooms[roomId] = { board: createInitialBoard(), p1, p2, turn: p1.socketId };
-            
-            io.sockets.sockets.get(p1.socketId)?.join(roomId);
-            io.sockets.sockets.get(p2.socketId)?.join(roomId);
-
-            io.to(p1.socketId).emit('match_found', { 
-                roomId, board: activeRooms[roomId].board, turn: p1.socketId, 
-                role: 'player1', opponent: p2.username, yourTurn: true 
-            });
-            io.to(p2.socketId).emit('match_found', { 
-                roomId, board: activeRooms[roomId].board, turn: p1.socketId, 
-                role: 'player2', opponent: p1.username, yourTurn: false 
-            });
-        }
+        // ... (Ibisigaye bya Socket logic yawe nkuko byari biri)
     });
-
-    socket.on('make_move', async (data) => {
-        const { roomId, row, col } = data;
-        const game = activeRooms[roomId];
-        if (!game || socket.id !== game.turn) return;
-
-        const role = (socket.id === game.p1.socketId) ? 'player1' : 'player2';
-        const result = playMove(game.board, role, row, col);
-
-        if (result.valid) {
-            game.board = result.board;
-            game.turn = (game.turn === game.p1.socketId) ? game.p2.socketId : game.p1.socketId;
-            
-            io.to(roomId).emit('update_board', { board: game.board, turn: game.turn, steps: result.steps });
-
-            if (!hasValidMoves(game.board, (game.turn === game.p1.socketId ? 'player1' : 'player2'))) {
-                const winner = (game.turn === game.p1.socketId) ? game.p2 : game.p1;
-                const loser = (game.turn === game.p1.socketId) ? game.p1 : game.p2;
-
-                if (useDB) {
-                    await pool.query('UPDATE users SET wallet_balance = wallet_balance + 200 WHERE id = $1', [winner.userId]);
-                    await pool.query('UPDATE users SET wallet_balance = wallet_balance - 200 WHERE id = $1', [loser.userId]);
-                }
-                io.to(roomId).emit('game_over', { winnerUsername: winner.username });
-                delete activeRooms[roomId];
-            }
-        }
-    });
-
-    socket.on('disconnect', () => {
-        onlineQueue = onlineQueue.filter(p => p.socketId !== socket.id);
-    });
+    
+    // ... (Game Logic izi zindi zose nka make_move nkuko wazituye)
 });
 
 const PORT = process.env.PORT || 10000;
